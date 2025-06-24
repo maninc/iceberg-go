@@ -237,9 +237,33 @@ func (parquetFormat) GetWriteProperties(props iceberg.Properties) any {
 }
 
 func (p parquetFormat) WriteDataFile(ctx context.Context, fs iceio.WriteFileIO, info WriteFileInfo, batches []arrow.Record) (iceberg.DataFile, error) {
-	fw, err := fs.Create(info.FileName)
+
+	fileStats, fileSize, err := p.writeFileInternal(ctx, fs, info, batches)
 	if err != nil {
 		return nil, err
+	}
+	return fileStats.
+		ToDataFile(info.FileSchema, info.Spec, info.FileName, iceberg.ParquetFile, fileSize), nil
+}
+
+func (p parquetFormat) WriteDeleteFile(ctx context.Context, content iceberg.ManifestEntryContent, fs iceio.WriteFileIO,
+	info WriteFileInfo, batches []arrow.Record, equalityFieldIds []int) (iceberg.DataFile, error) {
+	fileStats, fileSize, err := p.writeFileInternal(ctx, fs, info, batches)
+	if err != nil {
+		return nil, err
+	}
+	return fileStats.
+		ToDeleteFile(content, info.FileSchema, info.Spec, info.FileName, iceberg.ParquetFile, fileSize, equalityFieldIds, sortOrderId), nil
+}
+
+func (p parquetFormat) Extension() string {
+	return strings.ToLower(string(iceberg.ParquetFile))
+}
+
+func (p parquetFormat) writeFileInternal(ctx context.Context, fs iceio.WriteFileIO, info WriteFileInfo, batches []arrow.Record) (*DataFileStatistics, int64, error) {
+	fw, err := fs.Create(info.FileName)
+	if err != nil {
+		return nil, 0, err
 	}
 	defer fw.Close()
 
@@ -250,31 +274,30 @@ func (p parquetFormat) WriteDataFile(ctx context.Context, fs iceio.WriteFileIO, 
 
 	writer, err := pqarrow.NewFileWriter(batches[0].Schema(), &cntWriter, writerProps, arrProps)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	for _, batch := range batches {
 		if err := writer.WriteBuffered(batch); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 
 	if err := writer.Close(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	filemeta, err := writer.FileMetadata()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	colMapping, err := p.PathToIDMapping(info.FileSchema)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return p.DataFileStatsFromMeta(filemeta, info.StatsCols, colMapping).
-		ToDataFile(info.FileSchema, info.Spec, info.FileName, iceberg.ParquetFile, cntWriter.Count), nil
+	return p.DataFileStatsFromMeta(filemeta, info.StatsCols, colMapping), cntWriter.Count, nil
 }
 
 type decAsIntAgg[T int32 | int64] struct {

@@ -79,6 +79,9 @@ type FileFormat interface {
 	DataFileStatsFromMeta(rdr Metadata, statsCols map[int]StatisticsCollector, colMapping map[string]int) *DataFileStatistics
 	GetWriteProperties(iceberg.Properties) any
 	WriteDataFile(ctx context.Context, fs iceio.WriteFileIO, info WriteFileInfo, batches []arrow.Record) (iceberg.DataFile, error)
+	WriteDeleteFile(ctx context.Context, content iceberg.ManifestEntryContent, fs iceio.WriteFileIO,
+		info WriteFileInfo, batches []arrow.Record, equalityFieldIds []int) (iceberg.DataFile, error)
+	Extension() string
 }
 
 func GetFileFormat(format iceberg.FileFormat) FileFormat {

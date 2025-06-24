@@ -87,20 +87,31 @@ func (w *writer) writeFile(ctx context.Context, task WriteTask) (iceberg.DataFil
 }
 
 func writeFiles(ctx context.Context, rootLocation string, fs io.WriteFileIO, meta *MetadataBuilder, tasks iter.Seq[WriteTask]) iter.Seq2[iceberg.DataFile, error] {
-	locProvider, err := LoadLocationProvider(rootLocation, meta.props)
+	w, err := createWriter(rootLocation, fs, meta)
 	if err != nil {
 		return func(yield func(iceberg.DataFile, error) bool) {
 			yield(nil, err)
 		}
 	}
 
+	nworkers := config.EnvConfig.MaxWorkers
+
+	return internal.MapExec(nworkers, tasks, func(t WriteTask) (iceberg.DataFile, error) {
+		return w.writeFile(ctx, t)
+	})
+}
+
+func createWriter(rootLocation string, fs io.WriteFileIO, meta *MetadataBuilder) (*writer, error) {
+	locProvider, err := LoadLocationProvider(rootLocation, meta.props)
+	if err != nil {
+		return nil, err
+	}
+
 	format := internal.GetFileFormat(iceberg.ParquetFile)
 	fileSchema := meta.CurrentSchema()
 	sanitized, err := iceberg.SanitizeColumnNames(fileSchema)
 	if err != nil {
-		return func(yield func(iceberg.DataFile, error) bool) {
-			yield(nil, err)
-		}
+		return nil, err
 	}
 
 	// if the schema needs to be transformed, use the transformed schema
@@ -119,9 +130,5 @@ func writeFiles(ctx context.Context, rootLocation string, fs io.WriteFileIO, met
 		meta:       meta,
 	}
 
-	nworkers := config.EnvConfig.MaxWorkers
-
-	return internal.MapExec(nworkers, tasks, func(t WriteTask) (iceberg.DataFile, error) {
-		return w.writeFile(ctx, t)
-	})
+	return w, nil
 }

@@ -234,35 +234,36 @@ func (d *DataFileStatistics) PartitionValue(field iceberg.PartitionField, sc *ic
 	return lowerT.Val.Any()
 }
 
+func (d *DataFileStatistics) ToDeleteFile(content iceberg.ManifestEntryContent,
+	schema *iceberg.Schema,
+	spec iceberg.PartitionSpec,
+	path string,
+	format iceberg.FileFormat,
+	filesize int64,
+	equalityFieldIds []int,
+	sortOrderId *int) iceberg.DataFile {
+	bldr := d.createDataFileBuilder(content, schema, spec, path, format, filesize)
+
+	bldr.SplitOffsets(d.SplitOffsets)
+	bldr.EqualityFieldIDs(equalityFieldIds)
+	bldr.SortOrderID(*sortOrderId)
+
+	return bldr.Build()
+}
+
 func (d *DataFileStatistics) ToDataFile(schema *iceberg.Schema, spec iceberg.PartitionSpec, path string, format iceberg.FileFormat, filesize int64) iceberg.DataFile {
-	var fieldIDToPartitionData map[int]any
-	if !spec.Equals(*iceberg.UnpartitionedSpec) {
-		fieldIDToPartitionData = make(map[int]any)
-		for field := range spec.Fields() {
-			val := d.PartitionValue(field, schema)
-			if val != nil {
-				fieldIDToPartitionData[field.FieldID] = val
-			}
-		}
-	}
-
-	bldr, err := iceberg.NewDataFileBuilder(spec, iceberg.EntryContentData,
-		path, format, fieldIDToPartitionData, d.RecordCount, filesize)
-	if err != nil {
-		panic(err)
-	}
-
+	bldr := d.createDataFileBuilder(iceberg.EntryContentData, schema, spec, path, format, filesize)
 	lowerBounds := make(map[int][]byte)
 	upperBounds := make(map[int][]byte)
 
 	for fieldID, agg := range d.ColAggs {
-		min := must(agg.MinAsBytes())
-		max := must(agg.MaxAsBytes())
-		if len(min) > 0 {
-			lowerBounds[fieldID] = min
+		minVal := must(agg.MinAsBytes())
+		maxVal := must(agg.MaxAsBytes())
+		if len(minVal) > 0 {
+			lowerBounds[fieldID] = minVal
 		}
-		if len(max) > 0 {
-			upperBounds[fieldID] = max
+		if len(maxVal) > 0 {
+			upperBounds[fieldID] = maxVal
 		}
 	}
 
@@ -280,6 +281,28 @@ func (d *DataFileStatistics) ToDataFile(schema *iceberg.Schema, spec iceberg.Par
 	bldr.SplitOffsets(d.SplitOffsets)
 
 	return bldr.Build()
+}
+
+func (d *DataFileStatistics) createDataFileBuilder(content iceberg.ManifestEntryContent, schema *iceberg.Schema,
+	spec iceberg.PartitionSpec, path string, format iceberg.FileFormat, filesize int64) *iceberg.DataFileBuilder {
+	var fieldIDToPartitionData map[int]any
+	if !spec.Equals(*iceberg.UnpartitionedSpec) {
+		fieldIDToPartitionData = make(map[int]any)
+		for field := range spec.Fields() {
+			val := d.PartitionValue(field, schema)
+			if val != nil {
+				fieldIDToPartitionData[field.FieldID] = val
+			}
+		}
+	}
+
+	bldr, err := iceberg.NewDataFileBuilder(spec, content,
+		path, format, fieldIDToPartitionData, d.RecordCount, filesize)
+	if err != nil {
+		panic(err)
+	}
+
+	return bldr
 }
 
 type MetricModeType string
