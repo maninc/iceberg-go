@@ -247,13 +247,13 @@ func (p parquetFormat) WriteDataFile(ctx context.Context, fs iceio.WriteFileIO, 
 }
 
 func (p parquetFormat) WriteDeleteFile(ctx context.Context, content iceberg.ManifestEntryContent, fs iceio.WriteFileIO,
-	info WriteFileInfo, batches []arrow.Record, equalityFieldIds []int) (iceberg.DataFile, error) {
+	info WriteFileInfo, batches []arrow.Record, equalityFieldIds []int, sortId *int) (iceberg.DataFile, error) {
 	fileStats, fileSize, err := p.writeFileInternal(ctx, fs, info, batches)
 	if err != nil {
 		return nil, err
 	}
 	return fileStats.
-		ToDeleteFile(content, info.FileSchema, info.Spec, info.FileName, iceberg.ParquetFile, fileSize, equalityFieldIds, sortOrderId), nil
+		ToDeleteFile(content, info.FileSchema, info.Spec, info.FileName, iceberg.ParquetFile, fileSize, equalityFieldIds, sortId), nil
 }
 
 func (p parquetFormat) Extension() string {

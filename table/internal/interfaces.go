@@ -80,7 +80,7 @@ type FileFormat interface {
 	GetWriteProperties(iceberg.Properties) any
 	WriteDataFile(ctx context.Context, fs iceio.WriteFileIO, info WriteFileInfo, batches []arrow.Record) (iceberg.DataFile, error)
 	WriteDeleteFile(ctx context.Context, content iceberg.ManifestEntryContent, fs iceio.WriteFileIO,
-		info WriteFileInfo, batches []arrow.Record, equalityFieldIds []int) (iceberg.DataFile, error)
+		info WriteFileInfo, batches []arrow.Record, equalityFieldIds []int, sortId *int) (iceberg.DataFile, error)
 	Extension() string
 }
 

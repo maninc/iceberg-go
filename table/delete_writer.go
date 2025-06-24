@@ -29,15 +29,6 @@ import (
 	"github.com/apache/iceberg-go/table/internal"
 )
 
-type delete_writer struct {
-	writer
-	// equalityFieldIds is the list of field ids to use for equality deletes
-	equalityFieldIds []int
-	sortOrderId      int64
-}
-
-// BaseDeleteTask contains common fields for delete tasks
-
 func (t DeleteWriteTask) GenerateDeleteFileName(extension string) string {
 	return fmt.Sprintf("00000-%d-%s-deletes.%s", t.ID, t.Uuid, extension)
 }
@@ -81,7 +72,7 @@ func (w *writer) writeDeleteFile(ctx context.Context, task DeleteWriteTask) (ice
 		FileName:   filePath,
 		StatsCols:  statsCols,
 		WriteProps: w.props,
-	}, task.Batches, task.equalityFieldIds)
+	}, task.Batches, task.equalityFieldIds, &task.SortOrderID)
 }
 
 func writeDeleteFiles(ctx context.Context, rootLocation string, fs io.WriteFileIO, meta *MetadataBuilder, tasks iter.Seq[DeleteWriteTask]) iter.Seq2[iceberg.DataFile, error] {
